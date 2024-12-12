@@ -1,0 +1,12 @@
+flask
+requests
+python-dotenv
+speechrecognition
+gtts
+pydub
+langchain
+langchain_google_genai
+google-auth
+sounddevice
+langchain_community
+#Pyaudio streamlit
