@@ -3,7 +3,6 @@ import requests
 import speech_recognition as sr
 import pyttsx3
 from dotenv import load_dotenv
-import pywhatkit
 import datetime
 import wikipedia
 import pyjokes
@@ -84,7 +83,12 @@ def run_alexa():
         if 'play' in command:
             song = command.replace('play', '').strip()
             response = f'Playing {song}'
-            pywhatkit.playonyt(song)
+            # Only use pywhatkit if running in a local (non-headless) environment
+            if os.environ.get('DISPLAY', None) is None:
+                print("Skipping pywhatkit because we're in a headless environment.")
+            else:
+                import pywhatkit
+                pywhatkit.playonyt(song)
         elif 'time' in command:
             time = datetime.datetime.now().strftime('%I:%M %p')
             response = f'Current time is {time}'
