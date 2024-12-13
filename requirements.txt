@@ -1,7 +1,6 @@
 Flask
 pywhatkit
 gunicorn
-pywhatkit
 datetime
 wikipedia
 pyjokes

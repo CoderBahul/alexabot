@@ -1,23 +1,26 @@
 import os
 import requests
 import speech_recognition as sr
+import pyttsx3
 from dotenv import load_dotenv
 import pywhatkit
 import datetime
 import wikipedia
 import pyjokes
 from gtts import gTTS
-import playsound
+import os
+import time
 
 # Load the Gemini API key from .env
 load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
+# Initialize TTS engine (gTTS will be used instead of pyttsx3)
 def talk(text):
-    """Use gTTS to speak the text."""
+    """Speak the text using gTTS."""
     tts = gTTS(text=text, lang='en')
     tts.save("response.mp3")
-    playsound.playsound("response.mp3")
+    os.system("mpg321 response.mp3")  # Play the saved MP3 file using mpg321
     os.remove("response.mp3")
 
 def take_command():
@@ -26,6 +29,7 @@ def take_command():
         with sr.Microphone() as source:
             print('Listening...')
             listener = sr.Recognizer()
+            listener.adjust_for_ambient_noise(source)  # Handle ambient noise
             voice = listener.listen(source)
             command = listener.recognize_google(voice)
             command = command.lower()
@@ -48,7 +52,7 @@ def ask_gemini(question):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     data = {
-        "contents": [ {
+        "contents": [{
             "parts": [{"text": full_prompt}]
         }]
     }
@@ -74,7 +78,7 @@ def ask_gemini(question):
         return "There was an error contacting the API."
 
 def run_assistant():
-    """Run the assistant-like functionality."""
+    """Run the Assistant with different commands."""
     command = take_command()
     if command:
         if 'play' in command:
