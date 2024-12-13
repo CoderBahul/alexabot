@@ -1,29 +1,24 @@
 import os
 import requests
 import speech_recognition as sr
-import pyttsx3
 from dotenv import load_dotenv
+import pywhatkit
 import datetime
 import wikipedia
 import pyjokes
-from flask import Flask, jsonify, request
+from gtts import gTTS
+import playsound
 
 # Load the Gemini API key from .env
 load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Initialize Flask app
-app = Flask(__name__)
-
-# Initialize TTS engine
-engine = pyttsx3.init()
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[1].id)
-
 def talk(text):
-    """Speak the text using text-to-speech engine."""
-    engine.say(text)
-    engine.runAndWait()
+    """Use gTTS to speak the text."""
+    tts = gTTS(text=text, lang='en')
+    tts.save("response.mp3")
+    playsound.playsound("response.mp3")
+    os.remove("response.mp3")
 
 def take_command():
     """Listen for a command using the microphone."""
@@ -44,14 +39,16 @@ def take_command():
 
 def ask_gemini(question):
     """Send a question to the Gemini API and return the response with a custom prompt."""
-    custom_prompt = "When asked about identity or other related queries, the chatbot will: Respond in a neutral, helpful manner. Avoid explicitly stating that it's a chatbot by Google or based on Google/Gemini directly. Mention it’s made by Bahul Kansal when asked about its creation. Answer the user's question in a clear, concise, and engaging manner."
+    # Define a custom prompt for Gemini
+    custom_prompt = "When asked about identity or other related queries, the chatbot will:Respond in a neutral, helpful manner.Avoid explicitly stating that it's a chatbot by Google or based on Google/Gemini directly.Mention it’s made by Bahul Kansal when asked about its creation.Remember:Answer the user's question in a clear, concise, and engaging manner."
 
+    # Combine the custom prompt and the user’s question
     full_prompt = f"{custom_prompt} {question}"
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     data = {
-        "contents": [{
+        "contents": [ {
             "parts": [{"text": full_prompt}]
         }]
     }
@@ -62,8 +59,10 @@ def ask_gemini(question):
         if response.status_code == 200:
             gemini_response = response.json()
             print(f"API Response: {gemini_response}")
+            
+            # Extract the text from the API response
             if gemini_response.get('candidates'):
-                candidate = gemini_response['candidates'][0]  
+                candidate = gemini_response['candidates'][0]  # Take the first candidate
                 if 'content' in candidate and 'parts' in candidate['content']:
                     return candidate['content']['parts'][0]['text']
             return "The API response format is unexpected."
@@ -74,39 +73,31 @@ def ask_gemini(question):
         print(f"Error calling Gemini API: {e}")
         return "There was an error contacting the API."
 
-@app.route('/run-alexa', methods=['GET'])
-def run_alexa():
-    """Run the Alexa-like assistant."""
+def run_assistant():
+    """Run the assistant-like functionality."""
     command = take_command()
     if command:
-        response = ""
         if 'play' in command:
             song = command.replace('play', '').strip()
-            response = f'Playing {song}'
-            # Only use pywhatkit if running in a local (non-headless) environment
-            if os.environ.get('DISPLAY', None) is None:
-                print("Skipping pywhatkit because we're in a headless environment.")
-            else:
-                import pywhatkit
-                pywhatkit.playonyt(song)
+            talk(f'Playing {song}')
+            pywhatkit.playonyt(song)
         elif 'time' in command:
             time = datetime.datetime.now().strftime('%I:%M %p')
-            response = f'Current time is {time}'
+            talk(f'Current time is {time}')
         elif 'who the heck is' in command:
             person = command.replace('who the heck is', '').strip()
             try:
                 info = wikipedia.summary(person, 1)
-                response = info
+                talk(info)
             except Exception as e:
-                response = "I couldn't find information on that."
+                talk("I couldn't find information on that.")
         elif 'joke' in command:
-            response = pyjokes.get_joke()
+            talk(pyjokes.get_joke())
         else:
             # Treat unrecognized commands as questions for Gemini
             response = ask_gemini(command)
-        
-        # Return response as JSON
-        return jsonify({"response": response})
+            talk(response)
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    while True:
+        run_assistant()
