@@ -1,7 +1,6 @@
 Flask
 pywhatkit
 gunicorn
-pyttsx3
 pywhatkit
 datetime
 wikipedia
@@ -10,3 +9,4 @@ SpeechRecognition
 requests
 python-dotenv
 gTTs
+playsound
