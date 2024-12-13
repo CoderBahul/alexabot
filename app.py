@@ -1,105 +1,108 @@
 import os
-import streamlit as st
+import requests
 import speech_recognition as sr
-from gtts import gTTS
-import pydub.playback
-from pydub import AudioSegment
-import tempfile
-from langchain_google_genai import ChatGoogleGenerativeAI
+import pyttsx3
 from dotenv import load_dotenv
+import pywhatkit
+import datetime
+import wikipedia
+import pyjokes
+from flask import Flask, jsonify, request
 
-# Set ffmpeg path explicitly if necessary
-AudioSegment.ffmpeg = "E:/Gemini/ffmpeg/bin/ffmpeg.exe"
-
-# Load environment variables
+# Load the Gemini API key from .env
 load_dotenv()
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Initialize Google Gemini model (using ChatGoogleGenerativeAI)
-api_key = os.getenv("GEMINI_API_KEY")
-chat_model = ChatGoogleGenerativeAI(api_key=api_key, model="gemini-pro", temperature=0.7)
+# Initialize Flask app
+app = Flask(__name__)
 
-# Helper Functions
-def text_to_speech(text):
-    """Convert text to speech and play it instantly."""
-    if not text.strip():
-        return
-    tts = gTTS(text, lang="en")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
-        tts.save(temp_audio.name)
-        audio = AudioSegment.from_file(temp_audio.name)
-        fast_audio = audio.speedup(playback_speed=1.3)
-        pydub.playback.play(fast_audio)
+# Initialize TTS engine
+engine = pyttsx3.init()
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[1].id)
 
-def speech_to_text():
-    """Convert speech to text."""
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        try:
-            audio = recognizer.listen(source, timeout=5)
-            query = recognizer.recognize_google(audio)
-            return query
-        except sr.UnknownValueError:
-            return "Sorry, I couldn't understand. Please try again."
-        except sr.RequestError:
-            return "Error with the speech recognition service."
+def talk(text):
+    """Speak the text using text-to-speech engine."""
+    engine.say(text)
+    engine.runAndWait()
 
-def detect_wakeword():
-    """Continuously listen for the wake word 'UP'."""
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        while True:
-            try:
-                audio = recognizer.listen(source, timeout=10, phrase_time_limit=5)
-                query = recognizer.recognize_google(audio)
-                if "UP" in query.upper():
-                    return True
-            except sr.UnknownValueError:
-                pass
-            except sr.RequestError:
-                st.error("Microphone or recognition service error.")
-                break
-    return False
-
-def general_chatbot_response(query):
-    """Generate intelligent response using Gemini (ChatGoogleGenerativeAI)."""
+def take_command():
+    """Listen for a command using the microphone."""
     try:
-        # Log the query being sent
-        print(f"Sending query to Gemini: {query}")
-        
-        # Send the query to the model
-        response = chat_model.predict(query)
-        
-        # Log the raw response to check its structure
-        print(f"Raw response from Gemini: {response}")
-        
-        return response
+        with sr.Microphone() as source:
+            print('Listening...')
+            listener = sr.Recognizer()
+            voice = listener.listen(source)
+            command = listener.recognize_google(voice)
+            command = command.lower()
+            if 'hps' in command:
+                command = command.replace('hps', '').strip()
+                print(f"Command: {command}")
+                return command
     except Exception as e:
-        return f"Sorry, an error occurred: {e}"
+        print(f"Error: {e}")
+        return None
 
-# Main App
-def main():
-    st.set_page_config(page_title="Alexa-like Bot", layout="wide")
-    st.title("Alexa-like Bot")
+def ask_gemini(question):
+    """Send a question to the Gemini API and return the response with a custom prompt."""
+    custom_prompt = "When asked about identity or other related queries, the chatbot will: Respond in a neutral, helpful manner. Avoid explicitly stating that it's a chatbot by Google or based on Google/Gemini directly. Mention it’s made by Bahul Kansal when asked about its creation. Answer the user's question in a clear, concise, and engaging manner."
 
-    # Select bot type
-    bot_type = st.sidebar.radio(
-        "Choose Bot",
-        ["Alexa-like Bot"],
-        index=0
-    )
+    full_prompt = f"{custom_prompt} {question}"
 
-    if bot_type == "Alexa-like Bot":
-        st.subheader("Alexa-like Bot: Always Listening")
-        while True:
-            if detect_wakeword():
-                st.success("Wake word detected: 'UP'")
-                st.info("Listening for your query...")
-                voice_query = speech_to_text()
-                if voice_query:
-                    with st.spinner("Thinking..."):
-                        answer = general_chatbot_response(voice_query)
-                        st.write("Response:", answer)
-                        text_to_speech(answer)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{
+            "parts": [{"text": full_prompt}]
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        print(f"Request sent to API: {data}")
+        if response.status_code == 200:
+            gemini_response = response.json()
+            print(f"API Response: {gemini_response}")
+            if gemini_response.get('candidates'):
+                candidate = gemini_response['candidates'][0]  
+                if 'content' in candidate and 'parts' in candidate['content']:
+                    return candidate['content']['parts'][0]['text']
+            return "The API response format is unexpected."
+        else:
+            print(f"API Error: {response.status_code} {response.text}")
+            return "I couldn't get an answer from the API."
+    except Exception as e:
+        print(f"Error calling Gemini API: {e}")
+        return "There was an error contacting the API."
+
+@app.route('/run-alexa', methods=['GET'])
+def run_alexa():
+    """Run the Alexa-like assistant."""
+    command = take_command()
+    if command:
+        response = ""
+        if 'play' in command:
+            song = command.replace('play', '').strip()
+            response = f'Playing {song}'
+            pywhatkit.playonyt(song)
+        elif 'time' in command:
+            time = datetime.datetime.now().strftime('%I:%M %p')
+            response = f'Current time is {time}'
+        elif 'who the heck is' in command:
+            person = command.replace('who the heck is', '').strip()
+            try:
+                info = wikipedia.summary(person, 1)
+                response = info
+            except Exception as e:
+                response = "I couldn't find information on that."
+        elif 'joke' in command:
+            response = pyjokes.get_joke()
+        else:
+            # Treat unrecognized commands as questions for Gemini
+            response = ask_gemini(command)
+        
+        # Return response as JSON
+        return jsonify({"response": response})
 
 if __name__ == "__main__":
-    main()
+    app.run(host='0.0.0.0', port=5000)
