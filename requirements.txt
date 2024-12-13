@@ -9,3 +9,4 @@ pyjokes
 SpeechRecognition
 requests
 python-dotenv
+espeak
